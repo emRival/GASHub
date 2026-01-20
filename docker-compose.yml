@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: gas-bridge-postgres
+    environment:
+      POSTGRES_DB: gas_bridge_hub
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme123}
+    ports:
+      - "${DB_PORT:-9988}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database-schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./better-auth-schema.sql:/docker-entrypoint-initdb.d/02-auth.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - gas-bridge-network
+
+  # Application
+  gas-bridge-hub:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: gas-bridge-hub
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${APP_PORT:-9987}:3000"
+    environment:
+      # Database (Local PostgreSQL)
+      - DATABASE_URL=postgresql://postgres:${DB_PASSWORD:-changeme123}@postgres:5432/gas_bridge_hub
+      - SUPABASE_URL=http://postgres:5432
+      - SUPABASE_ANON_KEY=local-development-key
+      - SUPABASE_SERVICE_KEY=local-development-key
+      
+      # Auth
+      - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET:-your-secret-key-min-32-characters-long}
+      - BETTER_AUTH_URL=${BETTER_AUTH_URL:-http://localhost:3000}
+      
+      # App
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
+      - NODE_ENV=production
+      - PORT=3000
+    env_file:
+      - .env
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - gas-bridge-network
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  gas-bridge-network:
+    driver: bridge
