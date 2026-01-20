@@ -9,15 +9,18 @@ COPY backend/package*.json ./backend/
 COPY frontend/package*.json ./frontend/
 
 # Install dependencies
-RUN npm install --legacy-peer-deps
+RUN npm install --legacy-peer-deps || true
 WORKDIR /app/backend
 RUN npm install
 WORKDIR /app/frontend
 RUN npm install
 WORKDIR /app
 
-# Copy source code
-COPY . .
+# Copy source code (BEFORE building!)
+COPY backend/ ./backend/
+COPY frontend/ ./frontend/
+COPY database-schema.sql ./
+COPY better-auth-schema.sql ./
 
 # Build frontend
 WORKDIR /app/frontend
