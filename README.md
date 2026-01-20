@@ -4,7 +4,7 @@
 
 Transform your Google Apps Script into a powerful, secure API with real-time monitoring, API key management, and payload transformation.
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/yourusername/gas-bridge-hub)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/emRival/GASHub)
 [![Docker](https://img.shields.io/badge/docker-ready-blue)](https://hub.docker.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -25,8 +25,8 @@ Transform your Google Apps Script into a powerful, secure API with real-time mon
 
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/gas-bridge-hub.git
-cd gas-bridge-hub
+git clone https://github.com/emRival/GASHub.git
+cd GASHub
 
 # Run setup script
 bash setup.sh
@@ -57,8 +57,8 @@ npm run dev
 
 ```bash
 # 1. Clone and configure
-git clone https://github.com/yourusername/gas-bridge-hub.git
-cd gas-bridge-hub
+git clone https://github.com/emRival/GASHub.git
+cd GASHub
 cp backend/.env.example .env
 # Edit .env
 
@@ -242,8 +242,8 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ## 🆘 Support
 
 - 📚 [Documentation](./DEPLOYMENT_GUIDE.md)
-- 🐛 [Issue Tracker](https://github.com/yourusername/gas-bridge-hub/issues)
-- 💬 [Discussions](https://github.com/yourusername/gas-bridge-hub/discussions)
+- 🐛 [Issue Tracker](https://github.com/emRival/GASHub/issues)
+- 💬 [Discussions](https://github.com/emRival/GASHub/discussions)
 
 ## 🙏 Acknowledgments
 
