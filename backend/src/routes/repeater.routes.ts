@@ -13,6 +13,11 @@ import { GoogleAuth } from 'google-auth-library';
 import crypto from 'crypto'; // Retained as it's a Node.js built-in module and used later
 
 const router = Router();
+import { waitUntil } from '@vercel/functions';
+
+// --- IN-MEMORY CACHE (Simple LRU-like) ---
+const endpointCache = new Map<string, { data: any, timestamp: number }>();
+const CACHE_TTL_MS = 60 * 1000; // 60 seconds TTL
 
 // Helper to emit log events via WebSocket (Disabled for Serverless)
 const emitLogEvent = async (logData: any) => {
@@ -34,17 +39,29 @@ router.all('/r/:alias', async (req: Request, res: Response) => {
     const startTime = Date.now();
 
     try {
-        // 1. Fetch endpoint configuration
-        const { data: endpoint, error: fetchError } = await supabase
-            .from('endpoints')
-            .select('*')
-            .eq('alias', alias)
-            .eq('is_active', true)
-            .single();
+        // 1. Fetch endpoint configuration (CACHE FIRST)
+        let endpoint: any = null;
+        const cached = endpointCache.get(alias);
 
-        if (fetchError || !endpoint) {
-            // Log failed lookup (fire and forget to not block 404 response too much, 
-            // but await is safer in serverless to ensure execution, so we keep it fast)
+        if (cached && (Date.now() - cached.timestamp < CACHE_TTL_MS)) {
+            endpoint = cached.data;
+        } else {
+            // Cache Miss - Fetch DB
+            const { data, error } = await supabase
+                .from('endpoints')
+                .select('*')
+                .eq('alias', alias)
+                .eq('is_active', true)
+                .single();
+
+            if (!error && data) {
+                endpoint = data;
+                endpointCache.set(alias, { data, timestamp: Date.now() });
+            }
+        }
+
+        if (!endpoint) {
+            // Log failed lookup (Background)
             const logData = {
                 id: crypto.randomUUID(),
                 endpoint_id: null,
@@ -56,8 +73,8 @@ router.all('/r/:alias', async (req: Request, res: Response) => {
                 ip_address: getClientIp(req),
                 user_agent: req.get('user-agent'),
             };
-            // Use low-level insert to be slightly faster? Standard insert is fine.
-            await supabase.from('logs').insert(logData);
+            // Use waitUntil for non-blocking logging
+            waitUntil(supabase.from('logs').insert(logData));
 
             return res.status(404).json({
                 success: false,
@@ -79,7 +96,7 @@ router.all('/r/:alias', async (req: Request, res: Response) => {
                 ip_address: getClientIp(req),
                 user_agent: req.get('user-agent'),
             };
-            await supabase.from('logs').insert(logData);
+            waitUntil(supabase.from('logs').insert(logData));
             return res.status(405).json({
                 success: false,
                 message: `Method ${req.method} not allowed. Allowed: ${allowedMethods.join(', ')}`
@@ -102,13 +119,13 @@ router.all('/r/:alias', async (req: Request, res: Response) => {
                     ip_address: getClientIp(req),
                     user_agent: req.get('user-agent'),
                 };
-                await supabase.from('logs').insert(logData);
+                waitUntil(supabase.from('logs').insert(logData));
                 return res.status(401).json({ success: false, message: 'Unauthorized: API Key required' });
             }
 
             const hashedKey = crypto.createHash('sha256').update(apiKey).digest('hex');
 
-            // Optimizing: Select only necessary fields
+            // TODO: Cache Keys too for ultimate speed? For now, DB lookup.
             const [validKey] = await db.select({ id: apiKeys.id, allowed_endpoint_ids: apiKeys.allowed_endpoint_ids })
                 .from(apiKeys)
                 .where(and(
@@ -130,7 +147,7 @@ router.all('/r/:alias', async (req: Request, res: Response) => {
                     ip_address: getClientIp(req),
                     user_agent: req.get('user-agent'),
                 };
-                await supabase.from('logs').insert(logData);
+                waitUntil(supabase.from('logs').insert(logData));
                 return res.status(403).json({ success: false, message: 'Forbidden: Invalid API Key' });
             }
 
@@ -148,14 +165,15 @@ router.all('/r/:alias', async (req: Request, res: Response) => {
                         ip_address: getClientIp(req),
                         user_agent: req.get('user-agent'),
                     };
-                    await supabase.from('logs').insert(logData);
+                    waitUntil(supabase.from('logs').insert(logData));
                     return res.status(403).json({ success: false, message: 'Forbidden: API Key not authorized for this endpoint' });
                 }
             }
-
-            // Update usage stats (Fire and forget, but in array of promises later if possible. 
-            // For now, let's keep it here but don't await blocking valid flow heavily.
-            // Actually, we can defer this to the end parallel block).
+            // Key Usage Update (Background)
+            const updateKeyUsage = db.update(apiKeys)
+                .set({ last_used_at: new Date() })
+                .where(eq(apiKeys.id, validKey.id));
+            waitUntil(updateKeyUsage);
         }
         // -------------------------------
 
@@ -176,7 +194,8 @@ router.all('/r/:alias', async (req: Request, res: Response) => {
             }),
         });
 
-        // Parse response
+        // 4. Return response to client IMMEDIATELY
+        // We read text first to ensure we can send it, but we don't block on anything else.
         const responseText = await gasResponse.text();
         let jsonResponse;
         try {
@@ -185,10 +204,11 @@ router.all('/r/:alias', async (req: Request, res: Response) => {
             jsonResponse = { result: responseText, status: gasResponse.ok ? 'success' : 'error' };
         }
 
-        const responseTime = Date.now() - startTime;
+        // SEND RESPONSE NOW!
+        res.status(gasResponse.status).json(jsonResponse);
 
-        // 4. Parallelize Logging and Updates
-        // Prepare Log Data
+        // 5. Background Tasks (Logging & Updates)
+        const responseTime = Date.now() - startTime;
         const logData = {
             id: crypto.randomUUID(),
             endpoint_id: endpoint.id,
@@ -205,45 +225,39 @@ router.all('/r/:alias', async (req: Request, res: Response) => {
             user_agent: req.get('user-agent'),
         };
 
-        const promises = [];
+        const logPromise = supabase.from('logs').insert(logData);
+        const updatePromise = supabase.from('endpoints')
+            .update({ last_used_at: new Date().toISOString() })
+            .eq('id', endpoint.id);
 
-        // Task A: Insert Log
-        promises.push(supabase.from('logs').insert(logData));
+        // Keep serverless function alive until these finish
+        waitUntil(Promise.all([logPromise, updatePromise]));
 
-        // Task B: Update Endpoint Last Used
-        promises.push(
-            supabase.from('endpoints')
-                .update({ last_used_at: new Date().toISOString() })
-                .eq('id', endpoint.id)
-        );
-
-        // Await all background tasks
-        await Promise.all(promises);
-
-        // 5. Return response
-        return res.status(gasResponse.status).json(jsonResponse);
+        return; // Function execution ends here for the handler
 
     } catch (error: any) {
-        const responseTime = Date.now() - startTime;
-        // Error logging
-        const logData = {
-            id: crypto.randomUUID(),
-            endpoint_id: null,
-            request_method: req.method,
-            request_payload: req.body,
-            response_status: 500,
-            response_time_ms: responseTime,
-            error_message: error.message,
-            ip_address: req.ip,
-            user_agent: req.get('user-agent'),
-        };
-        await supabase.from('logs').insert(logData);
+        // If error occurs BEFORE response is sent
+        if (!res.headersSent) {
+            const responseTime = Date.now() - startTime;
+            const logData = {
+                id: crypto.randomUUID(),
+                endpoint_id: null,
+                request_method: req.method,
+                request_payload: req.body,
+                response_status: 500,
+                response_time_ms: responseTime,
+                error_message: error.message,
+                ip_address: req.ip,
+                user_agent: req.get('user-agent'),
+            };
+            waitUntil(supabase.from('logs').insert(logData));
 
-        return res.status(500).json({
-            success: false,
-            message: 'Internal server error while forwarding to GAS',
-            error: process.env.NODE_ENV === 'development' ? error.message : undefined,
-        });
+            return res.status(500).json({
+                success: false,
+                message: 'Internal server error',
+                error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+            });
+        }
     }
 });
 

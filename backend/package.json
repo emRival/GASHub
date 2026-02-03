@@ -22,6 +22,7 @@
     "@supabase/supabase-js": "^2.90.1",
     "@types/pg": "^8.16.0",
     "@types/uuid": "^10.0.0",
+    "@vercel/functions": "^3.4.0",
     "axios": "^1.13.4",
     "better-auth": "^1.4.12",
     "cheerio": "^1.2.0",
