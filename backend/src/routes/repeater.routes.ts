@@ -283,17 +283,21 @@ router.all('/r/:alias', async (req: Request, res: Response) => {
             user_agent: req.get('user-agent'),
         };
 
-        supabase.from('logs').insert(logData).then(() => {
+        // 4. Log the request (MUST AWAIT in Serverless)
+        const { error: logError } = await supabase.from('logs').insert(logData);
+
+        if (!logError) {
             // Emit to WebSocket clients for real-time dashboard updates
             emitLogEvent(logData);
-        });
+        } else {
+            console.error('[Repeater] Log insertion failed:', logError);
+        }
 
-        // 5. Update last_used_at timestamp (async)
-        supabase
+        // 5. Update last_used_at timestamp (MUST AWAIT in Serverless)
+        await supabase
             .from('endpoints')
             .update({ last_used_at: new Date().toISOString() })
-            .eq('id', endpoint.id)
-            .then();
+            .eq('id', endpoint.id);
 
         // 6. Return response to client
         return res.status(gasResponse.status).json(jsonResponse);
