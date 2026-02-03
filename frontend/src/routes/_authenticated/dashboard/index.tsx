@@ -37,7 +37,8 @@ function DashboardOverview() {
             if (!res.ok) throw new Error('Failed to fetch analytics');
             return res.json();
         },
-        refetchInterval: 60000 // Reduced from 30s to 60s since we have real-time updates
+        staleTime: 60000, // Cache for 1 minute
+        refetchOnWindowFocus: false // Rely on Realtime updates
     });
 
     const { data: timeline, isLoading: timelineLoading } = useQuery({
@@ -48,7 +49,9 @@ function DashboardOverview() {
             });
             if (!res.ok) throw new Error('Failed to fetch timeline');
             return res.json();
-        }
+        },
+        staleTime: 300000, // Cache for 5 minutes
+        refetchOnWindowFocus: false
     });
 
     // Fetch Recent Logs (Limit 5)
@@ -61,7 +64,8 @@ function DashboardOverview() {
             if (!res.ok) throw new Error('Failed to fetch recent logs');
             return res.json();
         },
-        refetchInterval: 30000 // Reduced from 10s to 30s since we have real-time updates
+        staleTime: 10000, // Cache for 10 seconds
+        refetchOnWindowFocus: false,
     });
 
     // Handle real-time log updates
