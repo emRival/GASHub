@@ -69,6 +69,7 @@ export const endpoints = pgTable("endpoints", {
     description: text("description"),
     payload_mapping: jsonb("payload_mapping"),
     require_api_key: boolean("require_api_key").default(false),
+    allowed_methods: jsonb("allowed_methods").default(['POST']),
     is_active: boolean("is_active").default(true),
     created_at: timestamp("created_at").defaultNow(),
     updated_at: timestamp("updated_at").defaultNow(),
