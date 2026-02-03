@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, jsonb, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean, jsonb, integer, index } from "drizzle-orm/pg-core";
 
 export const user = pgTable("user", {
     id: text("id").primaryKey(),
@@ -88,6 +88,12 @@ export const logs = pgTable("logs", {
     user_agent: text("user_agent"),
     error_message: text("error_message"),
     created_at: timestamp("created_at").defaultNow()
+}, (table) => {
+    return {
+        endpointIdx: index("endpoint_idx").on(table.endpoint_id),
+        createdIdx: index("created_idx").on(table.created_at),
+        statusIdx: index("status_idx").on(table.response_status),
+    };
 });
 
 
