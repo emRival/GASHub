@@ -74,7 +74,7 @@ router.all('/r/:alias', async (req: Request, res: Response) => {
                 user_agent: req.get('user-agent'),
             };
             // Use waitUntil for non-blocking logging
-            waitUntil(supabase.from('logs').insert(logData));
+            waitUntil(supabase.from('logs').insert(logData).then());
 
             return res.status(404).json({
                 success: false,
@@ -96,7 +96,7 @@ router.all('/r/:alias', async (req: Request, res: Response) => {
                 ip_address: getClientIp(req),
                 user_agent: req.get('user-agent'),
             };
-            waitUntil(supabase.from('logs').insert(logData));
+            waitUntil(supabase.from('logs').insert(logData).then());
             return res.status(405).json({
                 success: false,
                 message: `Method ${req.method} not allowed. Allowed: ${allowedMethods.join(', ')}`
@@ -119,7 +119,7 @@ router.all('/r/:alias', async (req: Request, res: Response) => {
                     ip_address: getClientIp(req),
                     user_agent: req.get('user-agent'),
                 };
-                waitUntil(supabase.from('logs').insert(logData));
+                waitUntil(supabase.from('logs').insert(logData).then());
                 return res.status(401).json({ success: false, message: 'Unauthorized: API Key required' });
             }
 
@@ -147,7 +147,7 @@ router.all('/r/:alias', async (req: Request, res: Response) => {
                     ip_address: getClientIp(req),
                     user_agent: req.get('user-agent'),
                 };
-                waitUntil(supabase.from('logs').insert(logData));
+                waitUntil(supabase.from('logs').insert(logData).then());
                 return res.status(403).json({ success: false, message: 'Forbidden: Invalid API Key' });
             }
 
@@ -165,7 +165,7 @@ router.all('/r/:alias', async (req: Request, res: Response) => {
                         ip_address: getClientIp(req),
                         user_agent: req.get('user-agent'),
                     };
-                    waitUntil(supabase.from('logs').insert(logData));
+                    waitUntil(supabase.from('logs').insert(logData).then());
                     return res.status(403).json({ success: false, message: 'Forbidden: API Key not authorized for this endpoint' });
                 }
             }
@@ -173,7 +173,7 @@ router.all('/r/:alias', async (req: Request, res: Response) => {
             const updateKeyUsage = db.update(apiKeys)
                 .set({ last_used_at: new Date() })
                 .where(eq(apiKeys.id, validKey.id));
-            waitUntil(updateKeyUsage);
+            waitUntil(updateKeyUsage.then());
         }
         // -------------------------------
 
@@ -225,10 +225,11 @@ router.all('/r/:alias', async (req: Request, res: Response) => {
             user_agent: req.get('user-agent'),
         };
 
-        const logPromise = supabase.from('logs').insert(logData);
+        const logPromise = supabase.from('logs').insert(logData).then();
         const updatePromise = supabase.from('endpoints')
             .update({ last_used_at: new Date().toISOString() })
-            .eq('id', endpoint.id);
+            .eq('id', endpoint.id)
+            .then();
 
         // Keep serverless function alive until these finish
         waitUntil(Promise.all([logPromise, updatePromise]));
@@ -250,7 +251,7 @@ router.all('/r/:alias', async (req: Request, res: Response) => {
                 ip_address: req.ip,
                 user_agent: req.get('user-agent'),
             };
-            waitUntil(supabase.from('logs').insert(logData));
+            waitUntil(supabase.from('logs').insert(logData).then());
 
             return res.status(500).json({
                 success: false,
