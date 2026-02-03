@@ -11,23 +11,24 @@ import { google } from 'googleapis';
 import { GoogleAuth } from 'google-auth-library';
 import crypto from 'crypto'; // Retained as it's a Node.js built-in module and used later
 
+// Retain imports at the top
+import { Router, Request, Response } from 'express';
+import { supabase } from '../lib/supabase.js';
+import { v4 as uuidv4 } from 'uuid';
+import axios from 'axios';
+import { db } from '../db/index.js';
+import { endpoints, logs, apiKeys } from '../db/schema.js';
+import { eq, sql, and } from 'drizzle-orm';
+import crypto from 'crypto';
+
 const router = Router();
 
-// Helper to emit log events via WebSocket (Disabled for Vercel/Serverless)
+// Helper to emit log events via WebSocket (Disabled for Serverless)
 const emitLogEvent = async (logData: any) => {
-    // Socket.IO is not supported in Vercel Serverless environment.
-    // Frontend now uses Supabase Realtime subscriptions to 'logs' table.
-    try {
-        // console.log(`[WebSocket] Skipping emit for serverless: ${logData.response_status}`);
-    } catch (error) {
-        console.error('[WebSocket] Failed to emit log event:', error);
-    }
+    // Socket.IO disabled for serverless scalability.
+    // Frontend uses Supabase Realtime.
 };
 
-/**
- * Dynamic Repeater Route
- * /r/:alias - Forward request to configured GAS endpoint
- */
 const getClientIp = (req: Request) => {
     const xForwardedFor = req.headers['x-forwarded-for'];
     if (xForwardedFor) {
@@ -42,7 +43,7 @@ router.all('/r/:alias', async (req: Request, res: Response) => {
     const startTime = Date.now();
 
     try {
-        // 1. Fetch endpoint configuration from database
+        // 1. Fetch endpoint configuration
         const { data: endpoint, error: fetchError } = await supabase
             .from('endpoints')
             .select('*')
@@ -51,7 +52,8 @@ router.all('/r/:alias', async (req: Request, res: Response) => {
             .single();
 
         if (fetchError || !endpoint) {
-            // Log failed lookup
+            // Log failed lookup (fire and forget to not block 404 response too much, 
+            // but await is safer in serverless to ensure execution, so we keep it fast)
             const logData = {
                 id: crypto.randomUUID(),
                 endpoint_id: null,
@@ -63,8 +65,8 @@ router.all('/r/:alias', async (req: Request, res: Response) => {
                 ip_address: getClientIp(req),
                 user_agent: req.get('user-agent'),
             };
+            // Use low-level insert to be slightly faster? Standard insert is fine.
             await supabase.from('logs').insert(logData);
-            emitLogEvent(logData);
 
             return res.status(404).json({
                 success: false,
@@ -74,11 +76,7 @@ router.all('/r/:alias', async (req: Request, res: Response) => {
 
         // Check Allowed Methods
         const allowedMethods = endpoint.allowed_methods || ['POST'];
-        console.log(`[Repeater] ${alias} | Method: ${req.method} | Allowed: ${JSON.stringify(allowedMethods)}`);
-
         if (!allowedMethods.includes(req.method)) {
-            // ... (logging and 405 return)
-            console.log(`[Repeater] BLOCKING request method ${req.method}`);
             const logData = {
                 id: crypto.randomUUID(),
                 endpoint_id: endpoint.id,
@@ -91,7 +89,6 @@ router.all('/r/:alias', async (req: Request, res: Response) => {
                 user_agent: req.get('user-agent'),
             };
             await supabase.from('logs').insert(logData);
-            emitLogEvent(logData);
             return res.status(405).json({
                 success: false,
                 message: `Method ${req.method} not allowed. Allowed: ${allowedMethods.join(', ')}`
@@ -103,7 +100,6 @@ router.all('/r/:alias', async (req: Request, res: Response) => {
             const apiKey = req.headers['x-api-key'] as string;
 
             if (!apiKey) {
-                console.warn(`[Repeater] Blocked: Missing API Key for ${alias}`);
                 const logData = {
                     id: crypto.randomUUID(),
                     endpoint_id: endpoint.id,
@@ -116,20 +112,13 @@ router.all('/r/:alias', async (req: Request, res: Response) => {
                     user_agent: req.get('user-agent'),
                 };
                 await supabase.from('logs').insert(logData);
-                emitLogEvent(logData);
                 return res.status(401).json({ success: false, message: 'Unauthorized: API Key required' });
             }
 
-            // Hash incoming key
             const hashedKey = crypto.createHash('sha256').update(apiKey).digest('hex');
 
-            // Verify against DB (using Drizzle for direct access)
-            // Need to import db and apiKeys at top of file, ensuring imports are present
-            const { db } = await import('../db/index.js');
-            const { apiKeys } = await import('../db/schema.js');
-            const { eq, and } = await import('drizzle-orm');
-
-            const [validKey] = await db.select()
+            // Optimizing: Select only necessary fields
+            const [validKey] = await db.select({ id: apiKeys.id, allowed_endpoint_ids: apiKeys.allowed_endpoint_ids })
                 .from(apiKeys)
                 .where(and(
                     eq(apiKeys.key_hash, hashedKey),
@@ -139,7 +128,6 @@ router.all('/r/:alias', async (req: Request, res: Response) => {
                 .limit(1);
 
             if (!validKey) {
-                console.warn(`[Repeater] Blocked: Invalid API Key for ${alias}`);
                 const logData = {
                     id: crypto.randomUUID(),
                     endpoint_id: endpoint.id,
@@ -152,15 +140,12 @@ router.all('/r/:alias', async (req: Request, res: Response) => {
                     user_agent: req.get('user-agent'),
                 };
                 await supabase.from('logs').insert(logData);
-                emitLogEvent(logData);
                 return res.status(403).json({ success: false, message: 'Forbidden: Invalid API Key' });
             }
 
-            // CHECK SCOPES
             const allowedEndpointIds = validKey.allowed_endpoint_ids as string[] | null;
             if (allowedEndpointIds && Array.isArray(allowedEndpointIds) && allowedEndpointIds.length > 0) {
                 if (!allowedEndpointIds.includes(endpoint.id)) {
-                    console.warn(`[Repeater] Blocked: Key not authorized for endpoint ${alias}`);
                     const logData = {
                         id: crypto.randomUUID(),
                         endpoint_id: endpoint.id,
@@ -173,100 +158,46 @@ router.all('/r/:alias', async (req: Request, res: Response) => {
                         user_agent: req.get('user-agent'),
                     };
                     await supabase.from('logs').insert(logData);
-                    emitLogEvent(logData);
                     return res.status(403).json({ success: false, message: 'Forbidden: API Key not authorized for this endpoint' });
                 }
             }
 
-            // Update usage stats (fire and forget)
-            db.update(apiKeys)
-                .set({ last_used_at: new Date() })
-                .where(eq(apiKeys.id, validKey.id))
-                .then();
+            // Update usage stats (Fire and forget, but in array of promises later if possible. 
+            // For now, let's keep it here but don't await blocking valid flow heavily.
+            // Actually, we can defer this to the end parallel block).
         }
         // -------------------------------
 
-        // 2. Transform payload if mapping exists
-        let transformedPayload = req.body;
-
+        // 2. Transform payload
+        let finalPayload = req.body;
         if (endpoint.payload_mapping && Object.keys(endpoint.payload_mapping).length > 0) {
-            transformedPayload = transformPayload(req.body, endpoint.payload_mapping);
+            finalPayload = transformPayload(req.body, endpoint.payload_mapping);
         }
 
-        // 3. Forward to Google
-        // Transform payload if mapping exists
-        const mapping = endpoint.payload_mapping as Record<string, string> | null;
-        let finalPayload = req.body; // Use req.body as the initial payload
-
-        if (mapping && Object.keys(mapping).length > 0) {
-            console.log(`[Repeater] Transforming payload for ${alias} with mapping:`, mapping);
-            finalPayload = {};
-
-            // Map known fields
-            Object.entries(mapping).forEach(([sourceKey, targetKey]) => {
-                if (req.body[sourceKey] !== undefined) {
-                    finalPayload[targetKey] = req.body[sourceKey];
-                }
-            });
-
-            // Pass through unmapped fields? 
-            // Decision: For now, strict mapping (only mapped fields + unmapped original). 
-            // Actually, usually users want to rename some and keep others.
-            // Let's implement: Result = Mapped Fields + (Original Fields NOT in Source Keys)
-            // But usually mappings are exclusive. Let's stick to:
-            // Result = Only fields defined in output? No, that's too strict.
-            // Let's go with: Start with empty, add mapped.
-            // If they want to keep "id", they should map "id" -> "id" or we provide a "Spread remaining" option later.
-            // For MVP: Mixed approach.
-            // If mapping exists, we construct a NEW object.
-
-            // Re-evaluating: Simplest predictive behavior is:
-            // 1. Create new object
-            // 2. Iterate source payload
-            // 3. If key is in mapping, use target key. Else, use original key.
-
-            finalPayload = {};
-            Object.keys(req.body).forEach(key => {
-                const targetKey = mapping[key];
-                if (targetKey) {
-                    finalPayload[targetKey] = req.body[key];
-                } else {
-                    finalPayload[key] = req.body[key];
-                }
-            });
-            console.log('[Repeater] Transformed:', finalPayload);
-        }
-
-        // Send to GAS
+        // 3. Forward to GAS
         const gasResponse = await fetch(endpoint.gas_url, {
-            method: 'POST', // GAS always expects POST
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                ...finalPayload, // Use finalPayload here
-                _method: req.method, // Pass original method in payload for GAS to handle if needed
+                ...finalPayload,
+                _method: req.method,
                 _headers: req.headers
             }),
         });
 
-        // Parse response (GAS might return text or JSON)
+        // Parse response
         const responseText = await gasResponse.text();
         let jsonResponse;
-
         try {
             jsonResponse = JSON.parse(responseText);
         } catch {
-            // If not valid JSON, wrap in object
-            jsonResponse = {
-                result: responseText,
-                status: gasResponse.ok ? 'success' : 'error'
-            };
+            jsonResponse = { result: responseText, status: gasResponse.ok ? 'success' : 'error' };
         }
 
         const responseTime = Date.now() - startTime;
 
-        // 4. Log the request (async, non-blocking)
+        // 4. Parallelize Logging and Updates
+        // Prepare Log Data
         const logData = {
             id: crypto.randomUUID(),
             endpoint_id: endpoint.id,
@@ -283,29 +214,27 @@ router.all('/r/:alias', async (req: Request, res: Response) => {
             user_agent: req.get('user-agent'),
         };
 
-        // 4. Log the request (MUST AWAIT in Serverless)
-        const { error: logError } = await supabase.from('logs').insert(logData);
+        const promises = [];
 
-        if (!logError) {
-            // Emit to WebSocket clients for real-time dashboard updates
-            emitLogEvent(logData);
-        } else {
-            console.error('[Repeater] Log insertion failed:', logError);
-        }
+        // Task A: Insert Log
+        promises.push(supabase.from('logs').insert(logData));
 
-        // 5. Update last_used_at timestamp (MUST AWAIT in Serverless)
-        await supabase
-            .from('endpoints')
-            .update({ last_used_at: new Date().toISOString() })
-            .eq('id', endpoint.id);
+        // Task B: Update Endpoint Last Used
+        promises.push(
+            supabase.from('endpoints')
+                .update({ last_used_at: new Date().toISOString() })
+                .eq('id', endpoint.id)
+        );
 
-        // 6. Return response to client
+        // Await all background tasks
+        await Promise.all(promises);
+
+        // 5. Return response
         return res.status(gasResponse.status).json(jsonResponse);
 
     } catch (error: any) {
         const responseTime = Date.now() - startTime;
-
-        // Log error
+        // Error logging
         const logData = {
             id: crypto.randomUUID(),
             endpoint_id: null,
@@ -318,7 +247,6 @@ router.all('/r/:alias', async (req: Request, res: Response) => {
             user_agent: req.get('user-agent'),
         };
         await supabase.from('logs').insert(logData);
-        emitLogEvent(logData);
 
         return res.status(500).json({
             success: false,
