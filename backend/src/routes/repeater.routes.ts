@@ -250,7 +250,7 @@ router.all('/r/:alias', async (req: Request, res: Response) => {
                 ip_address: req.ip,
                 user_agent: req.get('user-agent'),
             };
-            waitUntil(supabase.from('logs').insert(logData).then());
+            waitUntil(Promise.resolve(supabase.from('logs').insert(logData)));
 
             return res.status(500).json({
                 success: false,
