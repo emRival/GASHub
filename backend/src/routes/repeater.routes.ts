@@ -34,9 +34,12 @@ const getClientIp = (req: Request) => {
     return req.ip;
 };
 
-router.all('/r/:alias', async (req: Request, res: Response) => {
+router.all(['/r/:alias', '/r/:alias/*'], async (req: Request, res: Response) => {
     const { alias } = req.params;
     const startTime = Date.now();
+
+    // Extract subpath (e.g., /user/123 from /r/my-alias/user/123)
+    const subpath = req.path.replace(new RegExp(`^/r/${alias}`), '') || '/';
 
     try {
         // 1. Fetch endpoint configuration (CACHE FIRST)
@@ -190,7 +193,8 @@ router.all('/r/:alias', async (req: Request, res: Response) => {
             body: JSON.stringify({
                 ...finalPayload,
                 _method: req.method,
-                _headers: req.headers
+                _headers: req.headers,
+                _query: req.query // Keep raw query object in metadata
             }),
         });
 
