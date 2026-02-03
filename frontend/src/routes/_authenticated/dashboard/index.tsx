@@ -18,7 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Link } from '@tanstack/react-router';
 import { formatDateTime } from '@/lib/utils';
 import { useRealtimeLogs } from '@/hooks/useRealtimeLogs';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 export const Route = createFileRoute('/_authenticated/dashboard/')({
     component: DashboardOverview,
@@ -68,20 +68,25 @@ function DashboardOverview() {
         refetchOnWindowFocus: false,
     });
 
-    // Handle real-time log updates
+    // Handle real-time log updates (Throttled to 3s)
+    const lastUpdateRef = useRef(0);
+
     useEffect(() => {
         if (latestLog) {
-            // Invalidate queries to refresh data from server
-            queryClient.invalidateQueries({ queryKey: ['analytics', 'summary'] });
-            queryClient.invalidateQueries({ queryKey: ['logs', 'recent'] });
-            queryClient.invalidateQueries({ queryKey: ['analytics', 'timeline'] });
+            const now = Date.now();
+            if (now - lastUpdateRef.current > 3000) { // Update at most every 3 seconds
+                queryClient.invalidateQueries({ queryKey: ['analytics', 'summary'] });
+                queryClient.invalidateQueries({ queryKey: ['logs', 'recent'] });
+                queryClient.invalidateQueries({ queryKey: ['analytics', 'timeline'] });
+                lastUpdateRef.current = now;
+            }
         }
     }, [latestLog, queryClient]);
 
 
 
-    const timelineData = timeline?.data || [];
-    const logs = recentLogs?.data || [];
+    const timelineData = Array.isArray(timeline?.data) ? timeline.data : [];
+    const logs = Array.isArray(recentLogs?.data) ? recentLogs.data : [];
 
     // Use server stats directly (no optimistic updates to avoid double-counting)
     const displayStats = stats?.data;

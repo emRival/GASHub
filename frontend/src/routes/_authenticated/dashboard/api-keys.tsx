@@ -80,8 +80,8 @@ function ApiKeysPage() {
         }
     });
 
-    const keys = keysData?.data || [];
-    const endpoints = endpointsData?.data || [];
+    const keys = Array.isArray(keysData?.data) ? keysData.data : [];
+    const endpoints = Array.isArray(endpointsData?.data) ? endpointsData.data : [];
     const isLoading = isLoadingKeys || isLoadingEndpoints;
 
     const createMutation = useMutation({
