@@ -13,14 +13,12 @@ import crypto from 'crypto'; // Retained as it's a Node.js built-in module and u
 
 const router = Router();
 
-// Helper to emit log events via WebSocket
+// Helper to emit log events via WebSocket (Disabled for Vercel/Serverless)
 const emitLogEvent = async (logData: any) => {
+    // Socket.IO is not supported in Vercel Serverless environment.
+    // Frontend now uses Supabase Realtime subscriptions to 'logs' table.
     try {
-        console.log(`[WebSocket] Emitting log event: ${logData.response_status} - ${logData.error_message || 'Success'}`);
-        // Dynamic import to avoid circular dependency
-        const { io } = await import('../server');
-        io.emit('newLog', logData);
-        console.log(`[WebSocket] Event emitted successfully`);
+        // console.log(`[WebSocket] Skipping emit for serverless: ${logData.response_status}`);
     } catch (error) {
         console.error('[WebSocket] Failed to emit log event:', error);
     }
@@ -127,8 +125,8 @@ router.all('/r/:alias', async (req: Request, res: Response) => {
 
             // Verify against DB (using Drizzle for direct access)
             // Need to import db and apiKeys at top of file, ensuring imports are present
-            const { db } = await import('../db');
-            const { apiKeys } = await import('../db/schema');
+            const { db } = await import('../db/index.js');
+            const { apiKeys } = await import('../db/schema.js');
             const { eq, and } = await import('drizzle-orm');
 
             const [validKey] = await db.select()

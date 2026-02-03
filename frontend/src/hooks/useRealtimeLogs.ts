@@ -1,48 +1,51 @@
 import { useEffect, useState } from 'react';
-import { io, Socket } from 'socket.io-client';
+import { supabase } from '@/lib/supabase-client';
 
 interface LogEvent {
     id: string;
     endpoint_id: string;
-    method: string;
-    status_code: number;
-    response_time: number;
+    request_method: string;
+    response_status: number;
+    response_time_ms: number;
     created_at: string;
     [key: string]: any;
 }
 
 export function useRealtimeLogs() {
-    const [socket, setSocket] = useState<Socket | null>(null);
     const [latestLog, setLatestLog] = useState<LogEvent | null>(null);
     const [isConnected, setIsConnected] = useState(false);
 
     useEffect(() => {
-        const socketInstance = io(import.meta.env.VITE_API_URL || 'http://localhost:3000', {
-            withCredentials: true,
-            transports: ['websocket', 'polling'],
-        });
+        setIsConnected(true);
+        console.log('✅ Subscribing to Supabase Realtime: logs');
 
-        socketInstance.on('connect', () => {
-            console.log('✅ WebSocket connected');
-            setIsConnected(true);
-        });
-
-        socketInstance.on('disconnect', () => {
-            console.log('❌ WebSocket disconnected');
-            setIsConnected(false);
-        });
-
-        socketInstance.on('newLog', (log: LogEvent) => {
-            console.log('📊 New log received:', log);
-            setLatestLog(log);
-        });
-
-        setSocket(socketInstance);
+        const channel = supabase
+            .channel('realtime-logs')
+            .on(
+                'postgres_changes',
+                {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'logs'
+                },
+                (payload: any) => {
+                    console.log('📊 New log received (Realtime):', payload.new);
+                    setLatestLog(payload.new as LogEvent);
+                }
+            )
+            .subscribe((status: string) => {
+                if (status === 'SUBSCRIBED') {
+                    setIsConnected(true);
+                } else if (status === 'CHANNEL_ERROR') {
+                    setIsConnected(false);
+                    console.error('❌ Realtime subscription error');
+                }
+            });
 
         return () => {
-            socketInstance.disconnect();
+            supabase.removeChannel(channel);
         };
     }, []);
 
-    return { socket, latestLog, isConnected };
+    return { latestLog, isConnected };
 }
