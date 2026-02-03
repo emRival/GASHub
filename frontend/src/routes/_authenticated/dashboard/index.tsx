@@ -265,7 +265,7 @@ function DashboardOverview() {
                         <CardDescription>Status distribution</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <div className="h-[300px] w-full min-w-0">
+                        <div style={{ width: '100%', height: 300 }}>
                             {timelineLoading ? (
                                 <Skeleton className="w-full h-full rounded-lg" />
                             ) : timelineData.length > 0 ? (
