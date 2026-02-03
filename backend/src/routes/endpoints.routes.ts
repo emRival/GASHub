@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
-import { supabase } from '../lib/supabase';
+import { supabase } from '../lib/supabase.js';
 import { z } from 'zod';
-import { requireAuth } from '../middleware/auth.middleware';
+import { requireAuth } from '../middleware/auth.middleware.js';
 import crypto from 'crypto';
 
 const router = Router();

@@ -1,6 +1,15 @@
 import { Router, Request, Response } from 'express';
-import { supabase } from '../lib/supabase';
-import crypto from 'crypto';
+import { supabase } from '../lib/supabase.js';
+import { v4 as uuidv4 } from 'uuid';
+import axios from 'axios';
+import { db } from '../db/index.js';
+import { endpoints, logs, apiKeys } from '../db/schema.js';
+import { eq, sql, and } from 'drizzle-orm';
+import * as cheerio from 'cheerio';
+import { io } from '../server.js';
+import { google } from 'googleapis';
+import { GoogleAuth } from 'google-auth-library';
+import crypto from 'crypto'; // Retained as it's a Node.js built-in module and used later
 
 const router = Router();
 

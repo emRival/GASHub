@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { auth } from '../lib/auth';
+import { auth } from '../lib/auth.js';
 
 export async function requireAuth(
     req: Request,

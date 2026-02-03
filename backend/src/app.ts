@@ -1,11 +1,13 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import repeaterRoutes from './routes/repeater.routes';
-import endpointsRoutes from './routes/endpoints.routes';
-import logsRoutes from './routes/logs.routes';
-import analyticsRoutes from './routes/analytics.routes';
-import { auth } from './lib/auth';
+import repeaterRoutes from './routes/repeater.routes.js';
+import endpointsRoutes from './routes/endpoints.routes.js';
+import logsRoutes from './routes/logs.routes.js';
+import analyticsRoutes from './routes/analytics.routes.js';
+import { auth } from './lib/auth.js';
+import { sql } from 'drizzle-orm';
+import { db } from './db/index.js';
 
 const app = express();
 
@@ -25,13 +27,25 @@ app.use(express.json());
 import { toNodeHandler } from 'better-auth/node';
 
 // Better Auth routes
-app.all('/api/auth/*path', toNodeHandler(auth));
+// Explicitly handle OPTIONS for auth routes
+app.options('/api/auth/*', cors({
+    origin: process.env.FRONTEND_URL || '*',
+    credentials: true,
+}));
 
-import apiKeysRoutes from './routes/api-keys.routes';
+// Add verbose logging for debugging Vercel
+app.use((req, res, next) => {
+    console.log(`[Request] ${req.method} ${req.url}`);
+    next();
+});
+
+app.all('/api/auth/*', toNodeHandler(auth));
+
+import apiKeysRoutes from './routes/api-keys.routes.js';
 
 // API Routes
 // Rate Limiting for /api routes
-import { apiLimiter, repeaterLimiter } from './middleware/rate-limit.middleware';
+import { apiLimiter, repeaterLimiter } from './middleware/rate-limit.middleware.js';
 app.use('/api', apiLimiter); // Apply API limiter globally
 
 app.use(endpointsRoutes);  // /api/endpoints
@@ -44,13 +58,28 @@ app.use(repeaterLimiter); // Apply stricter limits to repeater
 app.use(repeaterRoutes);    // /r/:alias
 
 // Health check
-app.get('/health', (req, res) => {
-    res.json({
-        status: 'ok',
-        timestamp: new Date().toISOString(),
-        service: 'GAS Bridge Hub API',
-        database: 'connected'
-    });
+app.get('/health', async (req, res) => {
+    try {
+        const start = Date.now();
+        // Force a real query
+        await db.execute(sql`SELECT 1`);
+        const duration = Date.now() - start;
+
+        res.json({
+            status: 'ok',
+            timestamp: new Date().toISOString(),
+            service: 'GAS Bridge Hub API',
+            database: 'connected',
+            latency: `${duration}ms`
+        });
+    } catch (error: any) {
+        console.error('[Health] DB Check Failed:', error);
+        res.status(500).json({
+            status: 'error',
+            message: 'Database connection failed',
+            error: error.message
+        });
+    }
 });
 
 // API info

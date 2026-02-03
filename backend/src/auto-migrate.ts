@@ -1,8 +1,12 @@
 #!/usr/bin/env node
 import { createClient } from '@supabase/supabase-js';
 import { readFileSync } from 'fs';
-import { join } from 'path';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 dotenv.config();
 
@@ -119,7 +123,8 @@ async function runAutoMigration() {
 }
 
 // Only run if called directly
-if (require.main === module) {
+// Only run if called directly
+if (process.argv[1] === __filename) {
     runAutoMigration();
 }
 
