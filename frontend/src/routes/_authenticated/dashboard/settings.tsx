@@ -2,12 +2,9 @@ import { useSession, signOut } from '@/lib/auth-client';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
 import { SessionsCard } from '@/components/settings/sessions-card';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { LogOut, User } from 'lucide-react';
-import { useEffect, useState } from 'react';
 
 export const Route = createFileRoute('/_authenticated/dashboard/settings')({
     component: SettingsPage,

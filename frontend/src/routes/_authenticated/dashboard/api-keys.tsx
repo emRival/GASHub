@@ -38,7 +38,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { formatDateTime, formatDate } from '@/lib/utils';
+import { formatDateTime } from '@/lib/utils';
 
 export const Route = createFileRoute('/_authenticated/dashboard/api-keys')({
     component: ApiKeysPage,

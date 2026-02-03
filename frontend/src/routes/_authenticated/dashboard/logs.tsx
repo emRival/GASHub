@@ -38,10 +38,8 @@ import {
   CardTitle
 } from '@/components/ui/card';
 import { useState, useEffect } from 'react';
-import { useSession } from '@/lib/auth-client';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
-import { formatDateTime } from '@/lib/utils';
 import { useRealtimeLogs } from '@/hooks/useRealtimeLogs';
 
 import {

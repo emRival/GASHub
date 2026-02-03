@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Laptop, Phone, Smartphone, Globe, Loader2, Trash2, RefreshCw } from 'lucide-react';
+import { Laptop, Smartphone, Globe, Loader2, Trash2, RefreshCw } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { listSessions, revokeSession, useSession } from '@/lib/auth-client';
 import { formatDistanceToNow } from 'date-fns';

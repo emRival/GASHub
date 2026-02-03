@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { ArrowRight, BarChart2, CheckCircle2, Globe, Shield, Zap } from 'lucide-react';
+import { ArrowRight, BarChart2, Globe, Shield, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 

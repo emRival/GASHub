@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { useState } from 'react';
 import { signIn } from '@/lib/auth-client';
-import { Loader2, Zap, LayoutDashboard, Share2 } from 'lucide-react';
+import { Loader2, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import ThreeHubAnimation from '@/components/ThreeHubAnimation';
 
