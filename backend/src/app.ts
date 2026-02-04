@@ -29,27 +29,24 @@ const repeaterCors = cors({
 app.use('/r', repeaterCors);
 app.options('/r/*', repeaterCors); // Enable pre-flight for all repeater routes
 
-// 2. Restricted CORS for Dashboard API
-app.use(cors({
+// 2. Restricted CORS for Dashboard API (Apply ONLY to /api and /health)
+const dashboardCors = cors({
     origin: process.env.FRONTEND_URL || '*',
     credentials: true,
-}));
+});
+
+// Apply locally to routes, NOT globally
+// app.use(dashboardCors); <--- REMOVED GLOBAL USAGE
+
 app.use(express.json());
 
 import { toNodeHandler } from 'better-auth/node';
 
 // Better Auth routes
 // Explicitly handle OPTIONS for auth routes
-app.options('/api/auth/*', cors({
-    origin: process.env.FRONTEND_URL || '*',
-    credentials: true,
-}));
+app.options('/api/auth/*', dashboardCors);
 
-// Add verbose logging for debugging Vercel
-app.use((req, res, next) => {
-    console.log(`[Request] ${req.method} ${req.url}`);
-    next();
-});
+// ...
 
 app.all('/api/auth/*', toNodeHandler(auth));
 
@@ -58,6 +55,9 @@ import apiKeysRoutes from './routes/api-keys.routes.js';
 // API Routes
 // Rate Limiting for /api routes
 import { apiLimiter, repeaterLimiter } from './middleware/rate-limit.middleware.js';
+
+// Apply Dashboard CORS to /api routes
+app.use('/api', dashboardCors);
 app.use('/api', apiLimiter); // Apply API limiter globally
 
 app.use(endpointsRoutes);  // /api/endpoints
@@ -70,7 +70,7 @@ app.use(repeaterLimiter); // Apply stricter limits to repeater
 app.use(repeaterRoutes);    // /r/:alias
 
 // Health check
-app.get('/health', async (req, res) => {
+app.get('/health', dashboardCors, async (req, res) => {
     try {
         const start = Date.now();
         // Force a real query
