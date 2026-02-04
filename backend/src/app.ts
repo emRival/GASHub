@@ -18,6 +18,15 @@ app.set('trust proxy', 1);
 app.use(helmet({
     contentSecurityPolicy: false, // Disable for Vercel
 }));
+// 1. Permissive CORS for Repeater Routes (Webhook/Public API)
+app.use('/r/*', cors({
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key'],
+    credentials: false // '*' requires credentials to be false
+}));
+
+// 2. Restricted CORS for Dashboard API
 app.use(cors({
     origin: process.env.FRONTEND_URL || '*',
     credentials: true,
