@@ -38,10 +38,10 @@ router.all(['/r/:alias', '/r/:alias/*'], async (req: Request, res: Response) => 
     const { alias } = req.params;
     const startTime = Date.now();
 
-    // Extract subpath (e.g., /user/123 from /r/my-alias/user/123)
-    const subpath = req.path.replace(new RegExp(`^/r/${alias}`), '') || '/';
-
     try {
+        // Safe path extraction (handle potential missing req.path in serverless)
+        const pathStr = req.path || req.url || '';
+        const subpath = pathStr.replace(new RegExp(`^/r/${alias}`), '') || '/';
         // 1. Fetch endpoint configuration (CACHE FIRST)
         let endpoint: any = null;
         const cached = endpointCache.get(alias);
@@ -224,7 +224,7 @@ router.all(['/r/:alias', '/r/:alias/*'], async (req: Request, res: Response) => 
             id: crypto.randomUUID(),
             endpoint_id: endpoint.id,
             request_method: req.method,
-            request_payload: req.body,
+            request_payload: finalPayload, // Log the ACTUAL payload sent to GAS
             request_headers: {
                 'user-agent': req.get('user-agent'),
                 'content-type': req.get('content-type'),
