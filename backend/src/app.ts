@@ -19,12 +19,15 @@ app.use(helmet({
     contentSecurityPolicy: false, // Disable for Vercel
 }));
 // 1. Permissive CORS for Repeater Routes (Webhook/Public API)
-app.use('/r/*', cors({
+const repeaterCors = cors({
     origin: '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
     allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key'],
-    credentials: false // '*' requires credentials to be false
-}));
+    credentials: false
+});
+
+app.use('/r', repeaterCors);
+app.options('/r/*', repeaterCors); // Enable pre-flight for all repeater routes
 
 // 2. Restricted CORS for Dashboard API
 app.use(cors({
