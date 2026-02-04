@@ -181,9 +181,16 @@ router.all(['/r/:alias', '/r/:alias/*'], async (req: Request, res: Response) => 
         // -------------------------------
 
         // 2. Transform payload
-        let finalPayload = req.body;
+        // Construct Initial Payload: Body > Query > Params
+        let finalPayload: any = {
+            ...req.query,       // Flatten query params to root (e.g. ?token=123 -> { token: 123 })
+            ...req.body,        // Body takes precedence over query
+            _path: subpath,    // Add subpath info
+            _args: subpath.split('/').filter(Boolean) // Add split path args
+        };
+
         if (endpoint.payload_mapping && Object.keys(endpoint.payload_mapping).length > 0) {
-            finalPayload = transformPayload(req.body, endpoint.payload_mapping);
+            finalPayload = transformPayload(finalPayload, endpoint.payload_mapping);
         }
 
         // 3. Forward to GAS
